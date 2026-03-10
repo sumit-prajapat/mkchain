@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { Download, ArrowLeft, Copy, CheckCheck, ExternalLink, AlertTriangle,
-         Share2, Brain, TrendingUp, Clock, Hash } from 'lucide-react'
+         Share2, Brain, TrendingUp, Clock, Hash, Bitcoin } from 'lucide-react'
 import { getAnalysis, downloadReport } from '../api'
 import RiskGauge from '../components/RiskGauge'
 import TransactionGraph from '../components/TransactionGraph'
 import Graph3D from '../components/Graph3D'
 import { FlagBadge, RiskFactors } from '../components/RiskFactors'
+import BtcDeepDive from '../components/BtcDeepDive'
 
 const EXPLORER = {
   eth:     'https://etherscan.io/address/',
@@ -281,7 +282,7 @@ export default function Results() {
 
       {/* ── Tabs ── */}
       <div style={{ display:'flex', borderBottom:'1px solid var(--border)', marginBottom:24, gap:2 }}>
-        {[['graph','🕸 GRAPH'],['factors','🧠 RISK ANALYSIS'],['txns','📋 TRANSACTIONS']].map(([t,label]) => (
+        {[['graph','🕸 GRAPH'],['factors','🧠 RISK ANALYSIS'],['txns','📋 TRANSACTIONS'],...(data.chain==='btc'?[['btc','₿ BTC DEEP DIVE']]:[] )].map(([t,label]) => (
           <button key={t} onClick={() => setTab(t)} style={{
             background:'none', border:'none', borderBottom:`2px solid ${tab===t?'var(--cyan)':'transparent'}`,
             marginBottom:-1, cursor:'pointer', padding:'12px 22px',
@@ -418,6 +419,22 @@ export default function Results() {
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── BTC Deep Dive Tab ── */}
+      {tab === 'btc' && data.chain === 'btc' && (
+        <div className="animate-fade-up">
+          <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:20 }}>
+            <Bitcoin size={16} color="var(--orange)"/>
+            <span className="font-orbitron" style={{ fontSize:13, fontWeight:700, color:'white', letterSpacing:2 }}>
+              BITCOIN FORENSICS DEEP DIVE
+            </span>
+            <span className="font-mono" style={{ fontSize:9, color:'var(--dim)', letterSpacing:1, marginLeft:4 }}>
+              UTXO · CoinJoin · Coin Age · Clustering
+            </span>
+          </div>
+          <BtcDeepDive address={data.address}/>
         </div>
       )}
 
