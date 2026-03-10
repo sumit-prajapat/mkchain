@@ -88,7 +88,7 @@ function ParticleCanvas() {
     return () => { cancelAnimationFrame(animId); window.removeEventListener('resize', resize) }
   }, [])
 
-  return <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0.6 }} />
+  return <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0.6, pointerEvents: 'none', zIndex: 0 }} />
 }
 
 /* ── Typing text effect ───────────────────────────────── */
@@ -153,7 +153,7 @@ export default function Home() {
     <div style={{ position: 'relative', minHeight: '100vh' }}>
 
       {/* ── HERO ─────────────────────────────────────────── */}
-      <div style={{ position: 'relative', minHeight: '88vh', display: 'flex', alignItems: 'center', overflow: 'hidden' }}>
+      <div style={{ position: 'relative', minHeight: '88vh', display: 'flex', alignItems: 'center' }}>
         <ParticleCanvas />
 
         {/* Radial glow center */}
@@ -161,10 +161,10 @@ export default function Home() {
           position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
           width: 800, height: 800, borderRadius: '50%',
           background: 'radial-gradient(circle, rgba(0,245,255,0.06) 0%, transparent 70%)',
-          pointerEvents: 'none',
+          pointerEvents: 'none', zIndex: 0,
         }} />
 
-        <div style={{ position: 'relative', zIndex: 1, maxWidth: 1200, margin: '0 auto', padding: '80px 24px', width: '100%' }}>
+        <div style={{ position: 'relative', zIndex: 2, maxWidth: 1200, margin: '0 auto', padding: '80px 24px', width: '100%' }}>
 
           {/* Status pill */}
           <div className="animate-fade-up" style={{ marginBottom: 32, display: 'inline-flex', alignItems: 'center', gap: 10, padding: '8px 18px', border: '1px solid rgba(0,245,255,0.2)', borderRadius: 100, background: 'rgba(0,245,255,0.04)' }}>

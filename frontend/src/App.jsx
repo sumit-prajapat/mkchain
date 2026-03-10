@@ -8,9 +8,11 @@ import History from './pages/History'
 
 export default function App() {
   return (
-    <div className="min-h-screen grid-bg">
+    <div style={{ minHeight: '100vh', position: 'relative' }}>
+      {/* Fixed grid background — pointer-events none so it never blocks clicks */}
+      <div className="grid-bg" />
       <Navbar />
-      <main className="max-w-7xl mx-auto px-4 py-8">
+      <main style={{ maxWidth: 1200, margin: '0 auto', padding: '0 24px 80px', position: 'relative', zIndex: 1 }}>
         <Routes>
           <Route path="/"            element={<Home />} />
           <Route path="/analyze"     element={<Analyze />} />

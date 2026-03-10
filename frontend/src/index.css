@@ -12,12 +12,13 @@
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html{scroll-behavior:smooth}
-body{background:var(--void);color:var(--text);font-family:var(--font-body);min-height:100vh;overflow-x:hidden}
+html,body{height:100%;scroll-behavior:smooth}
+body{background:var(--void);color:var(--text);font-family:var(--font-body);min-height:100vh;overflow-x:hidden;overflow-y:auto}
 ::-webkit-scrollbar{width:3px}::-webkit-scrollbar-track{background:var(--abyss)}
 ::-webkit-scrollbar-thumb{background:var(--cyan);border-radius:2px}
 ::selection{background:var(--cyan);color:var(--void)}
 
-.grid-bg{
+.grid-bg{pointer-events:none !important;
   position:fixed;inset:0;z-index:0;pointer-events:none;
   background-image:linear-gradient(rgba(0,229,255,.015) 1px,transparent 1px),linear-gradient(90deg,rgba(0,229,255,.015) 1px,transparent 1px);
   background-size:52px 52px;
