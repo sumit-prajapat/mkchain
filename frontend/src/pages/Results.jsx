@@ -137,11 +137,37 @@ export default function Results() {
           )}
           {data.darkweb_hits?.length > 0 && (
             <div style={{ marginTop:14, paddingTop:14, borderTop:'1px solid var(--border)' }}>
-              <div style={{ fontFamily:'Space Mono', fontSize:9, color:'var(--red)', letterSpacing:2, marginBottom:8 }}>⚠ DARKWEB MATCHES</div>
+              <div style={{ fontFamily:'Space Mono', fontSize:9, color:'var(--red)', letterSpacing:2, marginBottom:10 }}>
+                ⚠ OFAC / OSINT MATCHES ({data.darkweb_hits.length})
+              </div>
               {data.darkweb_hits.map((h, i) => (
-                <div key={i} style={{ background:'rgba(255,0,51,.06)', border:'1px solid rgba(255,0,51,.2)', borderRadius:6, padding:'8px 10px', marginBottom:6 }}>
-                  <div style={{ fontFamily:'Space Mono', fontSize:10, color:'rgba(255,0,51,.8)', wordBreak:'break-all', marginBottom:3 }}>{h.address?.slice(0,20)}...</div>
-                  <div style={{ fontSize:11, color:'var(--red)' }}>{h.label}</div>
+                <div key={i} style={{ background:'rgba(255,0,51,.06)', border:'1px solid rgba(255,0,51,.25)', borderRadius:8, padding:'10px 12px', marginBottom:8 }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:5 }}>
+                    <span style={{ fontFamily:'Oxanium', fontSize:9, fontWeight:700, color:'var(--red)', letterSpacing:1.5 }}>
+                      {(h.category||'unknown').replace(/_/g,' ').toUpperCase()}
+                    </span>
+                    <span style={{ fontFamily:'Space Mono', fontSize:7, color:'rgba(255,0,51,.5)', letterSpacing:1 }}>
+                      {h.source}
+                    </span>
+                  </div>
+                  <div style={{ fontFamily:'Helvetica', fontSize:11, color:'white', fontWeight:600, marginBottom:4 }}>{h.label}</div>
+                  <div style={{ fontFamily:'Space Mono', fontSize:8, color:'rgba(255,0,51,.6)', wordBreak:'break-all', marginBottom:h.cross_chain_count > 1 ? 6 : 0 }}>
+                    {h.address?.slice(0,22)}...
+                  </div>
+                  {h.cross_chain_count > 1 && (
+                    <div style={{ fontFamily:'Space Mono', fontSize:7, color:'var(--gold)', letterSpacing:1 }}>
+                      🔗 CROSS-CHAIN: {h.cross_chain_count} addresses linked to this entity
+                    </div>
+                  )}
+                  {h.tags?.length > 0 && (
+                    <div style={{ display:'flex', flexWrap:'wrap', gap:4, marginTop:6 }}>
+                      {h.tags.slice(0,4).map(t => (
+                        <span key={t} style={{ fontFamily:'Space Mono', fontSize:7, color:'rgba(255,0,51,.5)', background:'rgba(255,0,51,.08)', border:'1px solid rgba(255,0,51,.15)', borderRadius:3, padding:'2px 6px', letterSpacing:.5 }}>
+                          {t}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

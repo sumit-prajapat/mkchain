@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from database import engine
 from models import Base
-from routes import analysis, reports
+from routes import analysis, reports, osint
 import os
 
 Base.metadata.create_all(bind=engine)
@@ -32,6 +32,7 @@ app.add_middleware(
 
 app.include_router(analysis.router, prefix="/api", tags=["Analysis"])
 app.include_router(reports.router,  prefix="/api", tags=["Reports"])
+app.include_router(osint.router,    prefix="/api", tags=["OSINT"])
 
 
 @app.get("/", tags=["Health"])
