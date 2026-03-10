@@ -40,9 +40,18 @@ export default function Results() {
   async function handlePDF() {
     try {
       const blob = await downloadReport(id)
-      const url = URL.createObjectURL(new Blob([blob]))
-      const a = document.createElement('a'); a.href=url; a.download=`mkchain-${data.address.slice(0,8)}.pdf`; a.click()
-    } catch { alert('PDF available in Phase 5!') }
+      const url = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `mkchain-${data.address.slice(0,10)}-report.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('PDF error:', err)
+      alert(`PDF download failed: ${err?.response?.data?.detail || err.message || 'Unknown error'}`)
+    }
   }
 
   if (loading) return (
