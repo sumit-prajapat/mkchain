@@ -1,0 +1,13 @@
+{
+  "name": "mkchain",
+  "private": true,
+  "description": "MKChain monorepo — blockchain forensics SaaS",
+  "scripts": {
+    "dev:web": "npm run dev --prefix apps/web",
+    "dev:api": "cd apps/api && uvicorn main:app --reload --port 8000",
+    "install:web": "npm install --prefix apps/web"
+  },
+  "dependencies": {
+    "framer-motion": "^12.40.0"
+  }
+}

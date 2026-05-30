@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
 from database import get_db
+from middleware.auth import require_api_key, AuthContext
 from models import WatchedAddress, Alert
 from services.blockchain import fetch_transactions
 from services.darkweb import check_darkweb, check_all_addresses
@@ -34,7 +35,7 @@ class MarkReadRequest(BaseModel):
 # ── CRUD ─────────────────────────────────────────────────────────────────────
 
 @router.post("/alerts/watch")
-def add_watch(req: WatchRequest, db: Session = Depends(get_db)):
+def add_watch(req: WatchRequest, ctx: AuthContext = Depends(require_api_key), db: Session = Depends(get_db)):
     """Add a wallet to the watch list."""
     existing = db.query(WatchedAddress).filter(
         WatchedAddress.address == req.address.lower(),
@@ -60,7 +61,7 @@ def add_watch(req: WatchRequest, db: Session = Depends(get_db)):
 
 
 @router.get("/alerts/watched")
-def list_watched(db: Session = Depends(get_db)):
+def list_watched(ctx: AuthContext = Depends(require_api_key), db: Session = Depends(get_db)):
     """List all watched addresses."""
     watches = db.query(WatchedAddress).filter(WatchedAddress.is_active == True).order_by(
         WatchedAddress.created_at.desc()).all()
@@ -81,7 +82,7 @@ def list_watched(db: Session = Depends(get_db)):
 
 
 @router.delete("/alerts/watch/{watch_id}")
-def remove_watch(watch_id: int, db: Session = Depends(get_db)):
+def remove_watch(watch_id: int, ctx: AuthContext = Depends(require_api_key), db: Session = Depends(get_db)):
     """Remove a wallet from watch list."""
     watch = db.query(WatchedAddress).filter(WatchedAddress.id == watch_id).first()
     if not watch:
@@ -92,7 +93,7 @@ def remove_watch(watch_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/alerts/feed")
-def get_alerts(limit: int = 50, db: Session = Depends(get_db)):
+def get_alerts(limit: int = 50, ctx: AuthContext = Depends(require_api_key), db: Session = Depends(get_db)):
     """Get recent alerts."""
     alerts = db.query(Alert).order_by(Alert.created_at.desc()).limit(limit).all()
     return [
@@ -112,7 +113,7 @@ def get_alerts(limit: int = 50, db: Session = Depends(get_db)):
 
 
 @router.post("/alerts/read")
-def mark_read(req: MarkReadRequest, db: Session = Depends(get_db)):
+def mark_read(req: MarkReadRequest, ctx: AuthContext = Depends(require_api_key), db: Session = Depends(get_db)):
     """Mark alerts as read."""
     db.query(Alert).filter(Alert.id.in_(req.alert_ids)).update(
         {"is_read": True}, synchronize_session=False)
@@ -121,7 +122,7 @@ def mark_read(req: MarkReadRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/alerts/check-now/{watch_id}")
-async def check_now(watch_id: int, db: Session = Depends(get_db)):
+async def check_now(watch_id: int, ctx: AuthContext = Depends(require_api_key), db: Session = Depends(get_db)):
     """Manually trigger a check for new transactions on a watched address."""
     watch = db.query(WatchedAddress).filter(
         WatchedAddress.id == watch_id, WatchedAddress.is_active == True).first()
@@ -136,7 +137,7 @@ async def check_now(watch_id: int, db: Session = Depends(get_db)):
 # ── SSE Real-time Stream ──────────────────────────────────────────────────────
 
 @router.get("/alerts/stream")
-async def alert_stream(db: Session = Depends(get_db)):
+async def alert_stream(ctx: AuthContext = Depends(require_api_key), db: Session = Depends(get_db)):
     """
     Server-Sent Events stream — pushes new alerts as they happen.
     Polls all watched addresses every 30 seconds.

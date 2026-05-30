@@ -24,7 +24,21 @@
 
 ---
 
-## 🗂 Project Structure
+## 🗂 Project Structure (Week 1 monorepo)
+
+```
+mkchain/
+├── apps/
+│   ├── api/                    # FastAPI (primary backend)
+│   └── web/                    # Next.js 15 (auth + dashboard)
+├── infra/supabase/migrations/  # SQL migrations (run in Supabase)
+├── frontend/                   # Legacy Vite UI (migrate in Week 2+)
+├── backend/                    # Deprecated → use apps/api
+├── docs/WEEK1.md               # Step-by-step setup guide
+```
+
+<details>
+<summary>Legacy structure (pre-Week 1)</summary>
 
 ```
 mkchain/
@@ -59,24 +73,35 @@ mkchain/
             └── History.jsx
 ```
 
+</details>
+
 ---
 
-## 🚀 Local Setup
+## 🚀 Local Setup (Week 1)
 
-### Backend
+See **[docs/WEEK1.md](docs/WEEK1.md)** for the full checklist.
+
+### API
 ```bash
-cd mkchain
-cp backend/.env.example backend/.env
-# Fill in your API keys in backend/.env
-docker-compose up
+cd apps/api
+cp .env.example .env
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
 ```
 
-### Frontend
+### Web (Next.js)
 ```bash
-cd frontend
-cp .env.example .env
+cd apps/web
+cp .env.example .env.local
 npm install
 npm run dev
+# → http://localhost:3000
+```
+
+### Legacy Vite frontend
+```bash
+cd frontend
+npm install && npm run dev
 # → http://localhost:5173
 ```
 

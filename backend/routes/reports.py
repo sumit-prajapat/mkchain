@@ -9,6 +9,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from database import get_db
+from middleware.auth import require_pdf_access, AuthContext
 from models import WalletAnalysis, GraphNode, GraphEdge
 from services.ai_summary import generate_ai_summary
 from services.pdf_report import generate_pdf_report
@@ -116,7 +117,7 @@ def _ensure_summary(analysis: WalletAnalysis, data: dict, db: Session) -> str:
 
 
 @router.get("/reports/{analysis_id}/pdf")
-def download_pdf(analysis_id: int, db: Session = Depends(get_db)):
+def download_pdf(analysis_id: int, ctx: AuthContext = Depends(require_pdf_access), db: Session = Depends(get_db)):
     """Generate and stream a professional forensics PDF report."""
     analysis = db.query(WalletAnalysis).filter(WalletAnalysis.id == analysis_id).first()
     if not analysis:
@@ -139,7 +140,7 @@ def download_pdf(analysis_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/reports/{analysis_id}/ai-summary")
-def regenerate_summary(analysis_id: int, db: Session = Depends(get_db)):
+def regenerate_summary(analysis_id: int, ctx: AuthContext = Depends(require_pdf_access), db: Session = Depends(get_db)):
     """Force-regenerate the AI summary."""
     analysis = db.query(WalletAnalysis).filter(WalletAnalysis.id == analysis_id).first()
     if not analysis:

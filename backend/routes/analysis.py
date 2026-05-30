@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from database import get_db
+from middleware.auth import require_api_key, AuthContext, increment_usage
 from models import WalletAnalysis, Transaction, GraphNode, GraphEdge
 from schemas import AnalyzeRequest, AnalysisResponse, AnalysisSummary
 from services.blockchain import fetch_wallet_balance, KNOWN_MIXERS
@@ -23,7 +24,11 @@ def validate_address(address: str, chain: str) -> bool:
 
 
 @router.post("/analyze", response_model=AnalysisResponse)
-async def analyze_wallet(req: AnalyzeRequest, db: Session = Depends(get_db)):
+async def analyze_wallet(
+    req: AnalyzeRequest,
+    ctx: AuthContext = Depends(require_api_key),
+    db: Session = Depends(get_db),
+):
     """
     Full forensic analysis pipeline:
     1. Fetch transactions
@@ -158,6 +163,12 @@ async def analyze_wallet(req: AnalyzeRequest, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(analysis)
 
+    try:
+        increment_usage(ctx.user_id, db)
+    except Exception:
+        # Usage increment is best-effort; don't fail the analysis response
+        pass
+
     return _build_response(analysis, graph_data, risk_exp["factors"], darkweb_hits, analysis.created_at)
 
 
@@ -182,14 +193,18 @@ def _build_response(analysis, graph, risk_factors, darkweb_hits, created_at):
 
 
 @router.get("/analyses", response_model=List[AnalysisSummary])
-def list_analyses(limit: int = 20, db: Session = Depends(get_db)):
-    return db.query(WalletAnalysis).order_by(
+def list_analyses(
+    limit: int = 20,
+    ctx: AuthContext = Depends(require_api_key),
+    db: Session = Depends(get_db),
+):
+    return db.query(WalletAnalysis).filter(WalletAnalysis.user_id == ctx.user_id).order_by(
         WalletAnalysis.created_at.desc()).limit(limit).all()
 
 
 @router.get("/analyses/{analysis_id}", response_model=AnalysisResponse)
-def get_analysis(analysis_id: int, db: Session = Depends(get_db)):
-    analysis = db.query(WalletAnalysis).filter(WalletAnalysis.id == analysis_id).first()
+def get_analysis(analysis_id: int, ctx: AuthContext = Depends(require_api_key), db: Session = Depends(get_db)):
+    analysis = db.query(WalletAnalysis).filter(WalletAnalysis.id == analysis_id, WalletAnalysis.user_id == ctx.user_id).first()
     if not analysis:
         raise HTTPException(status_code=404, detail="Analysis not found")
 
@@ -211,8 +226,8 @@ def get_analysis(analysis_id: int, db: Session = Depends(get_db)):
 
 
 @router.delete("/analyses/{analysis_id}")
-def delete_analysis(analysis_id: int, db: Session = Depends(get_db)):
-    analysis = db.query(WalletAnalysis).filter(WalletAnalysis.id == analysis_id).first()
+def delete_analysis(analysis_id: int, ctx: AuthContext = Depends(require_api_key), db: Session = Depends(get_db)):
+    analysis = db.query(WalletAnalysis).filter(WalletAnalysis.id == analysis_id, WalletAnalysis.user_id == ctx.user_id).first()
     if not analysis:
         raise HTTPException(status_code=404, detail="Analysis not found")
     db.delete(analysis)

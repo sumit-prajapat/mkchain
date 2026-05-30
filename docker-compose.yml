@@ -4,27 +4,27 @@ services:
   db:
     image: postgres:15
     environment:
-      POSTGRES_USER:     mkchain
+      POSTGRES_USER: mkchain
       POSTGRES_PASSWORD: mkchain123
-      POSTGRES_DB:       mkchain
+      POSTGRES_DB: mkchain
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
 
-  backend:
-    build: ./backend
+  api:
+    build: ./apps/api
     ports:
       - "8000:8000"
+    env_file:
+      - ./apps/api/.env
     environment:
-      DATABASE_URL:       postgresql://mkchain:mkchain123@db:5432/mkchain
-      ETHERSCAN_API_KEY:  ${ETHERSCAN_API_KEY}
-      BLOCKCYPHER_TOKEN:  ${BLOCKCYPHER_TOKEN}
-      FRONTEND_URL:       http://localhost:5173
+      DATABASE_URL: postgresql+psycopg://mkchain:mkchain123@db:5432/mkchain
+      FRONTEND_URL: http://localhost:3000
     depends_on:
       - db
     volumes:
-      - ./backend:/app
+      - ./apps/api:/app
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
 volumes:
