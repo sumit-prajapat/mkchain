@@ -1,0 +1,36 @@
+﻿// Organization Management Endpoints - ADD TO endpoints object in api.ts
+
+listOrganizations: () =>
+  api.get('/api/organizations').then((r) => r.data),
+
+createOrganization: (body: { name: string; slug?: string }) =>
+  api.post('/api/organizations', body).then((r) => r.data),
+
+getOrganization: (id: string) =>
+  api.get(`/api/organizations/${id}`).then((r) => r.data),
+
+updateOrganization: (id: string, body: { name?: string }) =>
+  api.patch(`/api/organizations/${id}`, body).then((r) => r.data),
+
+deleteOrganization: (id: string) =>
+  api.delete(`/api/organizations/${id}`).then((r) => r.data),
+
+// Member Management
+listMembers: (orgId: string) =>
+  api.get(`/api/organizations/${orgId}/members`).then((r) => r.data),
+
+inviteMember: (orgId: string, body: { email: string; role: string }) =>
+  api.post(`/api/organizations/${orgId}/members/invite`, body).then((r) => r.data),
+
+updateMemberRole: (orgId: string, memberId: string, role: string) =>
+  api.patch(`/api/organizations/${orgId}/members/${memberId}`, { role }).then((r) => r.data),
+
+removeMember: (orgId: string, memberId: string) =>
+  api.delete(`/api/organizations/${orgId}/members/${memberId}`).then((r) => r.data),
+
+// Invite Management
+getInvite: (token: string) =>
+  api.get(`/api/invites/${token}`).then((r) => r.data),
+
+acceptInvite: (token: string) =>
+  api.post(`/api/invites/${token}/accept`).then((r) => r.data),
