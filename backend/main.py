@@ -1,28 +1,32 @@
-import models  # registers all models with Base — must be before create_all
-import time
-import os
-from fastapi import FastAPI
+﻿from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import text
 from database import engine
 from models import Base
-from routes import analysis, reports, osint, compare, alerts, btc, dashboard
+from routes import analysis, reports, osint, compare, alerts, btc, organizations, billing
+from middleware.auth import auth_middleware
+from middleware.usage_enforcer import usage_enforcer_middleware
+from services.background_jobs import initialize_scheduler, shutdown_scheduler
+from database import get_db
+import os
+import logging
 
-# ── FastAPI app ───────────────────────────────────────────────────────────────
+logger = logging.getLogger(__name__)
+
+# Import models to ensure they're registered with Base.metadata
+import models_organization
+import models_billing
+
+Base.metadata.create_all(bind=engine)
+
 app = FastAPI(
     title="MKChain — Blockchain Forensics Intelligence Platform",
-    description="Multi-chain transaction tracing, ML risk scoring, and forensics reporting.",
+    description="Multi-chain transaction tracing, ML risk scoring, and forensics reporting with multi-tenant support.",
     version="2.0.0",
 )
 
-# ── CORS ──────────────────────────────────────────────────────────────────────
 FRONTEND_URL = os.getenv("FRONTEND_URL", "")
-origins = [
-    "http://localhost:3000",
-    "http://localhost:5173",
-    "http://127.0.0.1:3000",
-]
-if FRONTEND_URL and FRONTEND_URL not in origins:
+origins = ["http://localhost:5173", "http://localhost:3000", "https://mkchain.vercel.app"]
+if FRONTEND_URL:
     origins.append(FRONTEND_URL)
 
 app.add_middleware(
@@ -33,37 +37,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── Routers ───────────────────────────────────────────────────────────────────
-app.include_router(analysis.router,  prefix="/api", tags=["Analysis"])
-app.include_router(reports.router,   prefix="/api", tags=["Reports"])
-app.include_router(osint.router,     prefix="/api", tags=["OSINT"])
-app.include_router(compare.router,   prefix="/api", tags=["Compare"])
-app.include_router(alerts.router,    prefix="/api", tags=["Alerts"])
-app.include_router(btc.router,       prefix="/api", tags=["Bitcoin"])
-app.include_router(dashboard.router, prefix="/api", tags=["Dashboard"])
+# Add JWT authentication middleware (runs first - sets org_id in request.state)
+app.middleware('http')(auth_middleware)
+
+# Add usage enforcement middleware (runs after auth - requires org_id)
+app.middleware('http')(usage_enforcer_middleware)
+
+# API Routes
+app.include_router(organizations.router, tags=["Organizations"])  # NEW: Multi-tenancy
+app.include_router(billing.router, tags=["Billing"])  # NEW: Subscription billing
+app.include_router(analysis.router, prefix="/api", tags=["Analysis"])
+app.include_router(reports.router,  prefix="/api", tags=["Reports"])
+app.include_router(osint.router,    prefix="/api", tags=["OSINT"])
+app.include_router(compare.router,  prefix="/api", tags=["Compare"])
+app.include_router(alerts.router,   prefix="/api", tags=["Alerts"])
+app.include_router(btc.router,      prefix="/api", tags=["Bitcoin"])
 
 
-# ── Startup: wait for DB then create all tables ───────────────────────────────
-# This runs in the WORKER process (not the reloader), after uvicorn is ready.
-# Module-level create_all fails with --reload because it runs in the reloader
-# process before PostgreSQL accepts connections.
-@app.on_event("startup")
-async def startup():
-    max_retries = 20
-    for i in range(max_retries):
-        try:
-            with engine.connect() as conn:
-                conn.execute(text("SELECT 1"))
-            Base.metadata.create_all(bind=engine)
-            print("✅ Database connected and tables created")
-            return
-        except Exception as e:
-            print(f"⏳ DB not ready yet ({i+1}/{max_retries}): {e}")
-            time.sleep(3)
-    print("❌ Failed to connect to database after all retries")
-
-
-# ── Health ────────────────────────────────────────────────────────────────────
 @app.get("/", tags=["Health"])
 def health():
     return {
@@ -71,5 +61,38 @@ def health():
         "project":  "MKChain — Blockchain Forensics Intelligence Platform",
         "chains":   ["ETH", "BTC", "POLYGON"],
         "version":  "2.0.0",
-        "features": ["analysis", "compare", "alerts", "btc-deep", "osint", "pdf-reports"],
+        "features": ["analysis","compare","alerts","btc-deep","osint","pdf-reports","multi-tenant"],
     }
+
+
+# Application lifecycle events
+@app.on_event("startup")
+async def startup_event():
+    """Initialize background job scheduler on application startup"""
+    try:
+        logger.info("Starting background job scheduler...")
+        
+        # Create a database session factory for the scheduler
+        def db_session_factory():
+            return next(get_db())
+        
+        # Initialize and start the scheduler
+        initialize_scheduler(db_session_factory=db_session_factory)
+        logger.info("Background job scheduler started successfully")
+        
+    except Exception as e:
+        logger.error(f"Failed to start background job scheduler: {e}")
+        # Don't fail the application startup if scheduler fails
+        # The rest of the API should still work
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Shutdown background job scheduler on application shutdown"""
+    try:
+        logger.info("Shutting down background job scheduler...")
+        shutdown_scheduler()
+        logger.info("Background job scheduler shut down successfully")
+    except Exception as e:
+        logger.error(f"Error shutting down background job scheduler: {e}")
+

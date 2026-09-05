@@ -7,29 +7,61 @@ Endpoints:
   GET /api/darkweb/entity/{entity_id}
   GET /api/darkweb/check/{address}
 """
-from fastapi import APIRouter, Query, HTTPException
+import uuid
+import logging
+from fastapi import APIRouter, Query, HTTPException, Request, Depends
+from sqlalchemy.orm import Session
+from database import get_db
 from services.darkweb import (
     check_darkweb, search_db, get_entity, get_db_stats, ENTITY_INDEX
 )
+from services.usage_tracker import get_usage_tracker
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.get("/darkweb/stats")
-def darkweb_stats():
+async def darkweb_stats(request: Request, db: Session = Depends(get_db)):
     """
     Return statistics about the OSINT bad address database.
     Useful for the frontend dashboard tile.
     """
+    # Track API call usage if org context available (non-blocking)
+    org_id = getattr(request.state, 'organization_id', None)
+    if org_id:
+        try:
+            usage_tracker = get_usage_tracker(db)
+            await usage_tracker.increment_usage(
+                org_id=uuid.UUID(org_id),
+                metric_type="api_call",
+                amount=1.0
+            )
+        except Exception as e:
+            logger.warning(f"Failed to track API usage (org: {org_id}): {e}")
+    
     return get_db_stats()
 
 
 @router.get("/darkweb/check/{address}")
-def check_address(address: str):
+async def check_address(address: str, request: Request, db: Session = Depends(get_db)):
     """
     Check a single wallet address against the OSINT database.
     Returns full match metadata including cross-chain entity links.
     """
+    # Track API call usage if org context available (non-blocking)
+    org_id = getattr(request.state, 'organization_id', None)
+    if org_id:
+        try:
+            usage_tracker = get_usage_tracker(db)
+            await usage_tracker.increment_usage(
+                org_id=uuid.UUID(org_id),
+                metric_type="api_call",
+                amount=1.0
+            )
+        except Exception as e:
+            logger.warning(f"Failed to track API usage (org: {org_id}): {e}")
+    
     result = check_darkweb(address)
     if not result.get("is_known_bad"):
         return {"is_known_bad": False, "address": address}
@@ -37,7 +69,9 @@ def check_address(address: str):
 
 
 @router.get("/darkweb/search")
-def search_osint(
+async def search_osint(
+    request: Request,
+    db: Session = Depends(get_db),
     q:        str            = Query(..., description="Search query — label, tag, or partial address"),
     category: str | None     = Query(None, description="Filter by category (apt, ransomware, mixer, etc.)"),
     chain:    str | None     = Query(None, description="Filter by chain (eth, btc, polygon)"),
@@ -47,6 +81,19 @@ def search_osint(
     Full-text search across the OSINT database.
     Searches by label, entity name, tags, and partial address.
     """
+    # Track API call usage if org context available (non-blocking)
+    org_id = getattr(request.state, 'organization_id', None)
+    if org_id:
+        try:
+            usage_tracker = get_usage_tracker(db)
+            await usage_tracker.increment_usage(
+                org_id=uuid.UUID(org_id),
+                metric_type="api_call",
+                amount=1.0
+            )
+        except Exception as e:
+            logger.warning(f"Failed to track API usage (org: {org_id}): {e}")
+    
     if len(q.strip()) < 2:
         raise HTTPException(status_code=400, detail="Query must be at least 2 characters")
 
@@ -60,11 +107,24 @@ def search_osint(
 
 
 @router.get("/darkweb/entity/{entity_id}")
-def get_entity_profile(entity_id: str):
+async def get_entity_profile(entity_id: str, request: Request, db: Session = Depends(get_db)):
     """
     Get the full cross-chain profile of a known criminal entity.
     Returns all addresses attributed to this entity across all chains.
     """
+    # Track API call usage if org context available (non-blocking)
+    org_id = getattr(request.state, 'organization_id', None)
+    if org_id:
+        try:
+            usage_tracker = get_usage_tracker(db)
+            await usage_tracker.increment_usage(
+                org_id=uuid.UUID(org_id),
+                metric_type="api_call",
+                amount=1.0
+            )
+        except Exception as e:
+            logger.warning(f"Failed to track API usage (org: {org_id}): {e}")
+    
     entity = get_entity(entity_id)
     if not entity:
         raise HTTPException(
@@ -75,13 +135,28 @@ def get_entity_profile(entity_id: str):
 
 
 @router.get("/darkweb/entities")
-def list_entities(
+async def list_entities(
+    request: Request,
+    db: Session = Depends(get_db),
     category: str | None = Query(None, description="Filter by category"),
     limit:    int        = Query(50,   ge=1, le=200),
 ):
     """
     List all known entities in the OSINT database.
     """
+    # Track API call usage if org context available (non-blocking)
+    org_id = getattr(request.state, 'organization_id', None)
+    if org_id:
+        try:
+            usage_tracker = get_usage_tracker(db)
+            await usage_tracker.increment_usage(
+                org_id=uuid.UUID(org_id),
+                metric_type="api_call",
+                amount=1.0
+            )
+        except Exception as e:
+            logger.warning(f"Failed to track API usage (org: {org_id}): {e}")
+    
     entities = []
     for eid, addresses in ENTITY_INDEX.items():
         if not addresses:

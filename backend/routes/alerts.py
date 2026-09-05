@@ -1,24 +1,27 @@
-"""
-routes/alerts.py — Phase 9: Real-time Wallet Alerts
+﻿"""
+routes/alerts.py â€” Phase 9: Real-time Wallet Alerts
 REST CRUD + SSE streaming for live wallet monitoring
 """
 import asyncio
 import json
+import uuid
+import logging
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
 from database import get_db
-from middleware.auth import require_api_key, AuthContext
 from models import WatchedAddress, Alert
 from services.blockchain import fetch_transactions
 from services.darkweb import check_darkweb, check_all_addresses
 from services.graph import detect_all_patterns, build_hop_graph, compute_node_risks, serialize_graph
+from services.usage_tracker import get_usage_tracker
 from ml.risk_scorer import ml_risk_score
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class WatchRequest(BaseModel):
@@ -32,14 +35,36 @@ class MarkReadRequest(BaseModel):
     alert_ids: list
 
 
-# ── CRUD ─────────────────────────────────────────────────────────────────────
+# â”€â”€ CRUD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @router.post("/alerts/watch")
-def add_watch(req: WatchRequest, ctx: AuthContext = Depends(require_api_key), db: Session = Depends(get_db)):
-    """Add a wallet to the watch list."""
+async def add_watch(req: WatchRequest, request: Request, db: Session = Depends(get_db)):
+    """
+    Add a wallet to the watch list.
+    
+    Multi-tenant: Scoped to current organization.
+    """
+    org_id = request.state.organization_id
+    user_id = request.state.user_id
+    
+    if not org_id or not user_id:
+        raise HTTPException(status_code=401, detail="Missing organization or user context")
+    
+    # Track API call usage (non-blocking)
+    try:
+        usage_tracker = get_usage_tracker(db)
+        await usage_tracker.increment_usage(
+            org_id=uuid.UUID(org_id),
+            metric_type="api_call",
+            amount=1.0
+        )
+    except Exception as e:
+        logger.warning(f"Failed to track API usage (org: {org_id}): {e}")
+    
     existing = db.query(WatchedAddress).filter(
         WatchedAddress.address == req.address.lower(),
         WatchedAddress.chain   == req.chain,
+        WatchedAddress.org_id  == uuid.UUID(org_id),
     ).first()
     if existing:
         existing.is_active       = True
@@ -49,6 +74,8 @@ def add_watch(req: WatchRequest, ctx: AuthContext = Depends(require_api_key), db
         return {"message": "Watch updated", "id": existing.id}
 
     watch = WatchedAddress(
+        org_id          = uuid.UUID(org_id),
+        user_id         = uuid.UUID(user_id),
         address         = req.address.lower().strip(),
         chain           = req.chain,
         label           = req.label,
@@ -61,9 +88,31 @@ def add_watch(req: WatchRequest, ctx: AuthContext = Depends(require_api_key), db
 
 
 @router.get("/alerts/watched")
-def list_watched(ctx: AuthContext = Depends(require_api_key), db: Session = Depends(get_db)):
-    """List all watched addresses."""
-    watches = db.query(WatchedAddress).filter(WatchedAddress.is_active == True).order_by(
+async def list_watched(request: Request, db: Session = Depends(get_db)):
+    """List all watched addresses.
+    
+    Multi-tenant: Scoped to current organization.
+    """
+    org_id = request.state.organization_id
+    
+    if not org_id:
+        raise HTTPException(status_code=401, detail="Missing organization context")
+    
+    # Track API call usage (non-blocking)
+    try:
+        usage_tracker = get_usage_tracker(db)
+        await usage_tracker.increment_usage(
+            org_id=uuid.UUID(org_id),
+            metric_type="api_call",
+            amount=1.0
+        )
+    except Exception as e:
+        logger.warning(f"Failed to track API usage (org: {org_id}): {e}")
+    
+    watches = db.query(WatchedAddress).filter(
+        WatchedAddress.is_active == True,
+        WatchedAddress.org_id == uuid.UUID(org_id)
+    ).order_by(
         WatchedAddress.created_at.desc()).all()
     return [
         {
@@ -82,9 +131,31 @@ def list_watched(ctx: AuthContext = Depends(require_api_key), db: Session = Depe
 
 
 @router.delete("/alerts/watch/{watch_id}")
-def remove_watch(watch_id: int, ctx: AuthContext = Depends(require_api_key), db: Session = Depends(get_db)):
-    """Remove a wallet from watch list."""
-    watch = db.query(WatchedAddress).filter(WatchedAddress.id == watch_id).first()
+async def remove_watch(watch_id: int, request: Request, db: Session = Depends(get_db)):
+    """Remove a wallet from watch list.
+    
+    Multi-tenant: Scoped to current organization.
+    """
+    org_id = request.state.organization_id
+    
+    if not org_id:
+        raise HTTPException(status_code=401, detail="Missing organization context")
+    
+    # Track API call usage (non-blocking)
+    try:
+        usage_tracker = get_usage_tracker(db)
+        await usage_tracker.increment_usage(
+            org_id=uuid.UUID(org_id),
+            metric_type="api_call",
+            amount=1.0
+        )
+    except Exception as e:
+        logger.warning(f"Failed to track API usage (org: {org_id}): {e}")
+    
+    watch = db.query(WatchedAddress).filter(
+        WatchedAddress.id == watch_id,
+        WatchedAddress.org_id == uuid.UUID(org_id)
+    ).first()
     if not watch:
         raise HTTPException(404, "Watch not found")
     watch.is_active = False
@@ -93,9 +164,30 @@ def remove_watch(watch_id: int, ctx: AuthContext = Depends(require_api_key), db:
 
 
 @router.get("/alerts/feed")
-def get_alerts(limit: int = 50, ctx: AuthContext = Depends(require_api_key), db: Session = Depends(get_db)):
-    """Get recent alerts."""
-    alerts = db.query(Alert).order_by(Alert.created_at.desc()).limit(limit).all()
+async def get_alerts(request: Request, limit: int = 50, db: Session = Depends(get_db)):
+    """Get recent alerts.
+    
+    Multi-tenant: Scoped to current organization.
+    """
+    org_id = request.state.organization_id
+    
+    if not org_id:
+        raise HTTPException(status_code=401, detail="Missing organization context")
+    
+    # Track API call usage (non-blocking)
+    try:
+        usage_tracker = get_usage_tracker(db)
+        await usage_tracker.increment_usage(
+            org_id=uuid.UUID(org_id),
+            metric_type="api_call",
+            amount=1.0
+        )
+    except Exception as e:
+        logger.warning(f"Failed to track API usage (org: {org_id}): {e}")
+    
+    alerts = db.query(Alert).join(WatchedAddress).filter(
+        WatchedAddress.org_id == uuid.UUID(org_id)
+    ).order_by(Alert.created_at.desc()).limit(limit).all()
     return [
         {
             "id":         a.id,
@@ -113,19 +205,52 @@ def get_alerts(limit: int = 50, ctx: AuthContext = Depends(require_api_key), db:
 
 
 @router.post("/alerts/read")
-def mark_read(req: MarkReadRequest, ctx: AuthContext = Depends(require_api_key), db: Session = Depends(get_db)):
-    """Mark alerts as read."""
-    db.query(Alert).filter(Alert.id.in_(req.alert_ids)).update(
+async def mark_read(request: Request, req: MarkReadRequest, db: Session = Depends(get_db)):
+    """Mark alerts as read.
+    
+    Multi-tenant: Scoped to current organization.
+    """
+    org_id = request.state.organization_id
+    
+    if not org_id:
+        raise HTTPException(status_code=401, detail="Missing organization context")
+    
+    # Track API call usage (non-blocking)
+    try:
+        usage_tracker = get_usage_tracker(db)
+        await usage_tracker.increment_usage(
+            org_id=uuid.UUID(org_id),
+            metric_type="api_call",
+            amount=1.0
+        )
+    except Exception as e:
+        logger.warning(f"Failed to track API usage (org: {org_id}): {e}")
+    
+    db.query(Alert).join(WatchedAddress).filter(
+        Alert.id.in_(req.alert_ids),
+        WatchedAddress.org_id == uuid.UUID(org_id)
+    ).update(
         {"is_read": True}, synchronize_session=False)
     db.commit()
     return {"message": f"Marked {len(req.alert_ids)} as read"}
 
 
 @router.post("/alerts/check-now/{watch_id}")
-async def check_now(watch_id: int, ctx: AuthContext = Depends(require_api_key), db: Session = Depends(get_db)):
-    """Manually trigger a check for new transactions on a watched address."""
+async def check_now(watch_id: int, request: Request, db: Session = Depends(get_db)):
+    """Manually trigger a check for new transactions on a watched address.
+    
+    Multi-tenant: Scoped to current organization.
+    """
+    org_id = request.state.organization_id
+    
+    if not org_id:
+        raise HTTPException(status_code=401, detail="Missing organization context")
+    
     watch = db.query(WatchedAddress).filter(
-        WatchedAddress.id == watch_id, WatchedAddress.is_active == True).first()
+        WatchedAddress.id == watch_id,
+        WatchedAddress.is_active == True,
+        WatchedAddress.org_id == uuid.UUID(org_id)
+    ).first()
     if not watch:
         raise HTTPException(404, "Watch not found")
 
@@ -134,12 +259,12 @@ async def check_now(watch_id: int, ctx: AuthContext = Depends(require_api_key), 
     return {"new_alerts": new_alerts, "checked_at": str(datetime.utcnow())}
 
 
-# ── SSE Real-time Stream ──────────────────────────────────────────────────────
+# â”€â”€ SSE Real-time Stream â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @router.get("/alerts/stream")
-async def alert_stream(ctx: AuthContext = Depends(require_api_key), db: Session = Depends(get_db)):
+async def alert_stream(request: Request, db: Session = Depends(get_db)):
     """
-    Server-Sent Events stream — pushes new alerts as they happen.
+    Server-Sent Events stream â€” pushes new alerts as they happen.
     Polls all watched addresses every 30 seconds.
     """
     async def event_generator():
@@ -153,8 +278,15 @@ async def alert_stream(ctx: AuthContext = Depends(require_api_key), db: Session 
 
             try:
                 # Re-query within the generator
+                org_id = request.state.organization_id
+                if not org_id:
+                    yield f"data: {json.dumps({'type': 'error', 'message': 'Missing organization context'})}\n\n"
+                    return
+                
                 watches = db.query(WatchedAddress).filter(
-                    WatchedAddress.is_active == True).all()
+                    WatchedAddress.is_active == True,
+                    WatchedAddress.org_id == uuid.UUID(org_id)
+                ).all()
 
                 new_count = 0
                 for watch in watches:
@@ -197,7 +329,7 @@ async def alert_stream(ctx: AuthContext = Depends(require_api_key), db: Session 
     )
 
 
-# ── Internal checker ─────────────────────────────────────────────────────────
+# â”€â”€ Internal checker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async def _check_wallet(watch: WatchedAddress, db: Session) -> int:
     """Check a watched wallet for new transactions. Returns count of new alerts."""
@@ -233,7 +365,7 @@ async def _check_wallet(watch: WatchedAddress, db: Session) -> int:
         dw = check_darkweb(counter)
         if dw.get("is_known_bad"):
             alert_type = "darkweb"
-            message    = f"⚠️ Transaction with known bad address: {dw.get('label', 'Unknown')} ({dw.get('category', '')})"
+            message    = f"âš ï¸ Transaction with known bad address: {dw.get('label', 'Unknown')} ({dw.get('category', '')})"
 
         alert = Alert(
             watched_id = watch.id,
@@ -250,3 +382,5 @@ async def _check_wallet(watch: WatchedAddress, db: Session) -> int:
     watch.last_tx_hash = latest_hash
     watch.last_checked = datetime.utcnow()
     return alerts_created
+
+

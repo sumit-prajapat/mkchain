@@ -1,7 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from database import get_db
-from middleware.auth import require_api_key, AuthContext, increment_usage
 from models import WalletAnalysis, Transaction, GraphNode, GraphEdge
 from schemas import AnalyzeRequest, AnalysisResponse, AnalysisSummary
 from services.blockchain import fetch_wallet_balance, KNOWN_MIXERS
@@ -9,8 +8,13 @@ from services.graph import build_hop_graph, compute_node_risks, detect_all_patte
 from services.darkweb import check_darkweb, check_all_addresses, get_risk_boost
 from ml.risk_scorer import ml_risk_score, get_risk_explanation
 from services.ai_summary import generate_ai_summary
+from services.usage_tracker import get_usage_tracker
 from typing import List
 import re
+import uuid
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -24,11 +28,7 @@ def validate_address(address: str, chain: str) -> bool:
 
 
 @router.post("/analyze", response_model=AnalysisResponse)
-async def analyze_wallet(
-    req: AnalyzeRequest,
-    ctx: AuthContext = Depends(require_api_key),
-    db: Session = Depends(get_db),
-):
+async def analyze_wallet(req: AnalyzeRequest, request: Request, db: Session = Depends(get_db)):
     """
     Full forensic analysis pipeline:
     1. Fetch transactions
@@ -37,7 +37,16 @@ async def analyze_wallet(
     4. Check dark web / OFAC database
     5. Score risk 0-100 with explainability
     6. Store to DB and return
+    
+    Multi-tenant: Filters by organization_id from JWT token.
     """
+    # Extract organization_id and user_id from request.state (set by auth middleware)
+    org_id = request.state.organization_id
+    user_id = request.state.user_id
+    
+    if not org_id or not user_id:
+        raise HTTPException(status_code=401, detail="Missing organization or user context")
+    
     address = req.address.lower().strip()
     chain   = req.chain.lower()
     hops    = max(1, min(req.hops, 3))   # clamp 1-3
@@ -45,10 +54,11 @@ async def analyze_wallet(
     if not validate_address(req.address, chain):
         raise HTTPException(status_code=400, detail=f"Invalid {chain.upper()} address format")
 
-    # ── Return cached result if exists ──────────────────────────────────────
+    # ── Return cached result if exists (filtered by organization) ──────────────
     existing = db.query(WalletAnalysis).filter(
         WalletAnalysis.address == address,
         WalletAnalysis.chain   == chain,
+        WalletAnalysis.org_id  == uuid.UUID(org_id),
     ).order_by(WalletAnalysis.created_at.desc()).first()
 
     if existing:
@@ -66,6 +76,19 @@ async def analyze_wallet(
                       "mixer_nodes": 0, "exchange_nodes": 0, "max_hops": hops, "density": 0},
         }
         risk_exp = get_risk_explanation(existing.risk_score, existing.flags or [], [], chain)
+        
+        # Track usage for cached analysis (non-blocking)
+        try:
+            usage_tracker = get_usage_tracker(db)
+            await usage_tracker.increment_usage(
+                org_id=uuid.UUID(org_id),
+                metric_type="analysis",
+                amount=1.0
+            )
+        except Exception as e:
+            # Log error but don't fail the request
+            logger.warning(f"Failed to track usage for cached analysis (org: {org_id}): {e}")
+        
         return _build_response(existing, graph, risk_exp["factors"], [], existing.created_at)
 
     # ── Build multi-hop graph ────────────────────────────────────────────────
@@ -110,8 +133,10 @@ async def analyze_wallet(
     ts = sorted([tx.get("timestamp","") for tx in root_txns if tx.get("timestamp")])
     total_volume = sum(tx.get("value",0) for tx in root_txns)
 
-    # ── Persist to DB ─────────────────────────────────────────────────────────
+    # ── Persist to DB (with organization context) ────────────────────────────
     analysis = WalletAnalysis(
+        org_id       = uuid.UUID(org_id),
+        user_id      = uuid.UUID(user_id),
         address      = address,
         chain        = chain,
         risk_score   = risk_score,
@@ -163,11 +188,17 @@ async def analyze_wallet(
     db.commit()
     db.refresh(analysis)
 
+    # Track usage for new analysis (non-blocking)
     try:
-        increment_usage(ctx.user_id, db)
-    except Exception:
-        # Usage increment is best-effort; don't fail the analysis response
-        pass
+        usage_tracker = get_usage_tracker(db)
+        await usage_tracker.increment_usage(
+            org_id=uuid.UUID(org_id),
+            metric_type="analysis",
+            amount=1.0
+        )
+    except Exception as e:
+        # Log error but don't fail the request
+        logger.warning(f"Failed to track usage for new analysis (org: {org_id}): {e}")
 
     return _build_response(analysis, graph_data, risk_exp["factors"], darkweb_hits, analysis.created_at)
 
@@ -193,18 +224,61 @@ def _build_response(analysis, graph, risk_factors, darkweb_hits, created_at):
 
 
 @router.get("/analyses", response_model=List[AnalysisSummary])
-def list_analyses(
-    limit: int = 20,
-    ctx: AuthContext = Depends(require_api_key),
-    db: Session = Depends(get_db),
-):
-    return db.query(WalletAnalysis).filter(WalletAnalysis.user_id == ctx.user_id).order_by(
-        WalletAnalysis.created_at.desc()).limit(limit).all()
+async def list_analyses(request: Request, limit: int = 20, db: Session = Depends(get_db)):
+    """
+    List recent analyses for the current organization.
+    
+    Multi-tenant: Filters by organization_id from JWT token.
+    """
+    org_id = request.state.organization_id
+    
+    if not org_id:
+        raise HTTPException(status_code=401, detail="Missing organization context")
+    
+    # Track API call usage (non-blocking)
+    try:
+        usage_tracker = get_usage_tracker(db)
+        await usage_tracker.increment_usage(
+            org_id=uuid.UUID(org_id),
+            metric_type="api_call",
+            amount=1.0
+        )
+    except Exception as e:
+        logger.warning(f"Failed to track API usage (org: {org_id}): {e}")
+    
+    return db.query(WalletAnalysis).filter(
+        WalletAnalysis.org_id == uuid.UUID(org_id)
+    ).order_by(WalletAnalysis.created_at.desc()).limit(limit).all()
 
 
 @router.get("/analyses/{analysis_id}", response_model=AnalysisResponse)
-def get_analysis(analysis_id: int, ctx: AuthContext = Depends(require_api_key), db: Session = Depends(get_db)):
-    analysis = db.query(WalletAnalysis).filter(WalletAnalysis.id == analysis_id, WalletAnalysis.user_id == ctx.user_id).first()
+async def get_analysis(analysis_id: int, request: Request, db: Session = Depends(get_db)):
+    """
+    Get specific analysis details by ID.
+    
+    Multi-tenant: Ensures the analysis belongs to the current organization.
+    """
+    org_id = request.state.organization_id
+    
+    if not org_id:
+        raise HTTPException(status_code=401, detail="Missing organization context")
+    
+    # Track API call usage (non-blocking)
+    try:
+        usage_tracker = get_usage_tracker(db)
+        await usage_tracker.increment_usage(
+            org_id=uuid.UUID(org_id),
+            metric_type="api_call",
+            amount=1.0
+        )
+    except Exception as e:
+        logger.warning(f"Failed to track API usage (org: {org_id}): {e}")
+    
+    analysis = db.query(WalletAnalysis).filter(
+        WalletAnalysis.id == analysis_id,
+        WalletAnalysis.org_id == uuid.UUID(org_id)
+    ).first()
+    
     if not analysis:
         raise HTTPException(status_code=404, detail="Analysis not found")
 
@@ -226,10 +300,36 @@ def get_analysis(analysis_id: int, ctx: AuthContext = Depends(require_api_key), 
 
 
 @router.delete("/analyses/{analysis_id}")
-def delete_analysis(analysis_id: int, ctx: AuthContext = Depends(require_api_key), db: Session = Depends(get_db)):
-    analysis = db.query(WalletAnalysis).filter(WalletAnalysis.id == analysis_id, WalletAnalysis.user_id == ctx.user_id).first()
+async def delete_analysis(analysis_id: int, request: Request, db: Session = Depends(get_db)):
+    """
+    Delete an analysis by ID.
+    
+    Multi-tenant: Ensures the analysis belongs to the current organization.
+    """
+    org_id = request.state.organization_id
+    
+    if not org_id:
+        raise HTTPException(status_code=401, detail="Missing organization context")
+    
+    # Track API call usage (non-blocking)
+    try:
+        usage_tracker = get_usage_tracker(db)
+        await usage_tracker.increment_usage(
+            org_id=uuid.UUID(org_id),
+            metric_type="api_call",
+            amount=1.0
+        )
+    except Exception as e:
+        logger.warning(f"Failed to track API usage (org: {org_id}): {e}")
+    
+    analysis = db.query(WalletAnalysis).filter(
+        WalletAnalysis.id == analysis_id,
+        WalletAnalysis.org_id == uuid.UUID(org_id)
+    ).first()
+    
     if not analysis:
         raise HTTPException(status_code=404, detail="Analysis not found")
+    
     db.delete(analysis)
     db.commit()
     return {"message": "Deleted successfully"}

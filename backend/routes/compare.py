@@ -1,16 +1,22 @@
-"""
-routes/compare.py — Phase 9: Wallet Comparison
-POST /api/compare  → analyze two wallets, return side-by-side + shared intel
+﻿"""
+routes/compare.py â€” Phase 9: Wallet Comparison
+POST /api/compare  â†’ analyze two wallets, return side-by-side + shared intel
 """
 import asyncio
-from fastapi import APIRouter, HTTPException
+import uuid
+import logging
+from fastapi import APIRouter, HTTPException, Request, Depends
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
+from database import get_db
 from services.blockchain import fetch_transactions, classify_address
 from services.darkweb import check_darkweb, check_all_addresses, get_risk_boost
 from services.graph import build_hop_graph, compute_node_risks, detect_all_patterns, serialize_graph
+from services.usage_tracker import get_usage_tracker
 from ml.risk_scorer import ml_risk_score, get_risk_explanation
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class CompareRequest(BaseModel):
@@ -115,8 +121,15 @@ def _find_shared_intel(a: dict, b: dict) -> dict:
 
 
 @router.post("/compare")
-async def compare_wallets(req: CompareRequest):
-    """Compare two wallets side by side with shared intelligence."""
+async def compare_wallets(request: Request, req: CompareRequest, db: Session = Depends(get_db)):
+    """
+    Compare two wallets side by side with shared intelligence.
+    
+    Multi-tenant: Authentication required but no data persistence, so no org filtering needed.
+    The request.state.organization_id is available for future audit logging.
+    """
+    org_id = getattr(request.state, 'organization_id', None)
+    
     if req.address_a.lower() == req.address_b.lower() and req.chain_a == req.chain_b:
         raise HTTPException(400, "Cannot compare a wallet with itself")
 
@@ -128,9 +141,23 @@ async def compare_wallets(req: CompareRequest):
     )
 
     shared = _find_shared_intel(result_a, result_b)
+    
+    # Track usage for comparison (counts as 2 analyses since we analyze 2 addresses)
+    if org_id:
+        try:
+            usage_tracker = get_usage_tracker(db)
+            await usage_tracker.increment_usage(
+                org_id=uuid.UUID(org_id),
+                metric_type="analysis",
+                amount=2.0  # Count as 2 analyses
+            )
+        except Exception as e:
+            # Log error but don't fail the request
+            logger.warning(f"Failed to track usage for comparison (org: {org_id}): {e}")
 
     return {
         "wallet_a": result_a,
         "wallet_b": result_b,
         "shared":   shared,
     }
+

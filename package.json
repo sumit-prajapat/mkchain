@@ -1,13 +1,22 @@
-{
+﻿{
   "name": "mkchain",
+  "version": "2.0.0",
   "private": true,
-  "description": "MKChain monorepo — blockchain forensics SaaS",
-  "scripts": {
-    "dev:web": "npm run dev --prefix apps/web",
-    "dev:api": "cd apps/api && uvicorn main:app --reload --port 8000",
-    "install:web": "npm install --prefix apps/web"
+  "description": "Open-source blockchain forensics platform",
+  "author": "MKChain Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sumit-prajapat/mkchain.git"
   },
-  "dependencies": {
-    "framer-motion": "^12.40.0"
-  }
+  "scripts": {
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && uvicorn main:app --reload",
+    "install:frontend": "cd frontend && npm install",
+    "install:backend": "cd backend && pip install -r requirements.txt",
+    "build": "cd frontend && npm run build",
+    "lint": "cd frontend && npm run lint",
+    "test:backend": "cd backend && pytest"
+  },
+  "keywords": ["blockchain", "forensics", "ethereum", "bitcoin", "ml", "osint"]
 }

@@ -1,17 +1,9 @@
-# Deprecated
+﻿# MKChain Backend
 
-The API has moved to **`apps/api/`**.
+FastAPI blockchain forensics engine.
 
-Use:
+## Quick Start
 
-```bash
-cd apps/api
-cp .env.example .env
-uvicorn main:app --reload --port 8000
-```
+pip install -r requirements.txt
+uvicorn main:app --reload
 
-Or from repo root:
-
-```bash
-docker compose up
-```

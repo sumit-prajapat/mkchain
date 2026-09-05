@@ -1,7 +1,9 @@
 from sqlalchemy import Column, Integer, String, Float, DateTime, Text, Boolean, ForeignKey, JSON
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from datetime import datetime
+import uuid
 
 Base = declarative_base()
 
@@ -9,6 +11,8 @@ Base = declarative_base()
 class WalletAnalysis(Base):
     __tablename__ = "wallet_analyses"
     id            = Column(Integer, primary_key=True, index=True)
+    org_id        = Column(UUID(as_uuid=True), nullable=False, index=True)  # MULTI-TENANCY
+    user_id       = Column(UUID(as_uuid=True), nullable=False, index=True)  # Who created it
     address       = Column(String, index=True)
     chain         = Column(String)
     risk_score    = Column(Float, default=0)
@@ -82,6 +86,8 @@ class KnownBadAddress(Base):
 class WatchedAddress(Base):
     __tablename__ = "watched_addresses"
     id              = Column(Integer, primary_key=True, index=True)
+    org_id          = Column(UUID(as_uuid=True), nullable=False, index=True)  # MULTI-TENANCY
+    user_id         = Column(UUID(as_uuid=True), nullable=False, index=True)
     address         = Column(String, index=True)
     chain           = Column(String)
     label           = Column(String, default="")          # user-defined name
@@ -93,9 +99,30 @@ class WatchedAddress(Base):
     alerts          = relationship("Alert", back_populates="watched", cascade="all, delete")
 
 
+# ── Analysis Archive for Data Retention ──────────────────────────────────────
+class AnalysisArchive(Base):
+    """
+    Archive table to preserve analysis metadata after retention cleanup.
+    Stores minimal metadata for audit purposes without the full analysis data.
+    """
+    __tablename__ = "analysis_archives"
+    id               = Column(Integer, primary_key=True, index=True)
+    original_id      = Column(Integer, index=True)  # Original analysis ID
+    org_id           = Column(UUID(as_uuid=True), nullable=False, index=True)
+    user_id          = Column(UUID(as_uuid=True), nullable=False, index=True)
+    address          = Column(String, index=True)
+    chain            = Column(String)
+    risk_score       = Column(Float)
+    risk_label       = Column(String)
+    created_at       = Column(DateTime)  # Original creation date
+    archived_at      = Column(DateTime, default=datetime.utcnow)  # When archived
+    deletion_reason  = Column(String, default="retention_policy")  # Why deleted
+
+
 class Alert(Base):
     __tablename__ = "alerts"
     id           = Column(Integer, primary_key=True, index=True)
+    org_id       = Column(UUID(as_uuid=True), nullable=False, index=True)  # MULTI-TENANCY
     watched_id   = Column(Integer, ForeignKey("watched_addresses.id"))
     address      = Column(String, index=True)
     chain        = Column(String)

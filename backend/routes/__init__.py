@@ -1,1 +1,1 @@
-from . import analysis, reports, osint, compare, alerts, btc, dashboard
+from . import analysis, reports, osint, compare, alerts, btc

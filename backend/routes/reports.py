@@ -4,17 +4,20 @@ GET  /api/reports/{id}/pdf        → stream forensics PDF
 POST /api/reports/{id}/ai-summary → regenerate AI summary
 """
 import json
-from fastapi import APIRouter, Depends, HTTPException
+import uuid
+import logging
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from database import get_db
-from middleware.auth import require_pdf_access, AuthContext
 from models import WalletAnalysis, GraphNode, GraphEdge
 from services.ai_summary import generate_ai_summary
 from services.pdf_report import generate_pdf_report
+from services.usage_tracker import get_usage_tracker
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _safe_json(value):
@@ -117,9 +120,33 @@ def _ensure_summary(analysis: WalletAnalysis, data: dict, db: Session) -> str:
 
 
 @router.get("/reports/{analysis_id}/pdf")
-def download_pdf(analysis_id: int, ctx: AuthContext = Depends(require_pdf_access), db: Session = Depends(get_db)):
-    """Generate and stream a professional forensics PDF report."""
-    analysis = db.query(WalletAnalysis).filter(WalletAnalysis.id == analysis_id).first()
+async def download_pdf(analysis_id: int, request: Request, db: Session = Depends(get_db)):
+    """
+    Generate and stream a professional forensics PDF report.
+    
+    Multi-tenant: Ensures the analysis belongs to the current organization.
+    """
+    org_id = request.state.organization_id
+    
+    if not org_id:
+        raise HTTPException(status_code=401, detail="Missing organization context")
+    
+    # Track API call usage (non-blocking)
+    try:
+        usage_tracker = get_usage_tracker(db)
+        await usage_tracker.increment_usage(
+            org_id=uuid.UUID(org_id),
+            metric_type="api_call",
+            amount=1.0
+        )
+    except Exception as e:
+        logger.warning(f"Failed to track API usage (org: {org_id}): {e}")
+    
+    analysis = db.query(WalletAnalysis).filter(
+        WalletAnalysis.id == analysis_id,
+        WalletAnalysis.org_id == uuid.UUID(org_id)
+    ).first()
+    
     if not analysis:
         raise HTTPException(status_code=404, detail="Analysis not found")
 
@@ -140,9 +167,33 @@ def download_pdf(analysis_id: int, ctx: AuthContext = Depends(require_pdf_access
 
 
 @router.post("/reports/{analysis_id}/ai-summary")
-def regenerate_summary(analysis_id: int, ctx: AuthContext = Depends(require_pdf_access), db: Session = Depends(get_db)):
-    """Force-regenerate the AI summary."""
-    analysis = db.query(WalletAnalysis).filter(WalletAnalysis.id == analysis_id).first()
+async def regenerate_summary(analysis_id: int, request: Request, db: Session = Depends(get_db)):
+    """
+    Force-regenerate the AI summary.
+    
+    Multi-tenant: Ensures the analysis belongs to the current organization.
+    """
+    org_id = request.state.organization_id
+    
+    if not org_id:
+        raise HTTPException(status_code=401, detail="Missing organization context")
+    
+    # Track API call usage (non-blocking)
+    try:
+        usage_tracker = get_usage_tracker(db)
+        await usage_tracker.increment_usage(
+            org_id=uuid.UUID(org_id),
+            metric_type="api_call",
+            amount=1.0
+        )
+    except Exception as e:
+        logger.warning(f"Failed to track API usage (org: {org_id}): {e}")
+    
+    analysis = db.query(WalletAnalysis).filter(
+        WalletAnalysis.id == analysis_id,
+        WalletAnalysis.org_id == uuid.UUID(org_id)
+    ).first()
+    
     if not analysis:
         raise HTTPException(status_code=404, detail="Analysis not found")
 
