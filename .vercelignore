@@ -1,0 +1,6 @@
+﻿backend/
+database/
+.kiro/
+*.md
+.git/
+node_modules/
