@@ -9,7 +9,16 @@ from services.background_jobs import initialize_scheduler, shutdown_scheduler
 from database import get_db
 import os
 import logging
+import sys
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+    ]
+)
 logger = logging.getLogger(__name__)
 
 # Import models to ensure they're registered with Base.metadata
@@ -25,7 +34,7 @@ app = FastAPI(
 )
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "")
-origins = ["http://localhost:5173", "http://localhost:3000", "https://mkchain.vercel.app"]
+origins = ["http://localhost:5173", "http://localhost:3000", "http://localhost:8080", "https://mkchain.vercel.app"]
 if FRONTEND_URL:
     origins.append(FRONTEND_URL)
 
@@ -62,6 +71,7 @@ def health():
         "chains":   ["ETH", "BTC", "POLYGON"],
         "version":  "2.0.0",
         "features": ["analysis","compare","alerts","btc-deep","osint","pdf-reports","multi-tenant"],
+        "demo_mode": os.getenv("DEMO_MODE", "false"),
     }
 
 
@@ -70,6 +80,9 @@ def health():
 async def startup_event():
     """Initialize background job scheduler on application startup"""
     try:
+        logger.info("🚀 Starting MKChain Backend...")
+        logger.info(f"Demo Mode: {os.getenv('DEMO_MODE', 'false')}")
+        logger.info(f"Billing Enabled: {os.getenv('BILLING_ENABLED', 'false')}")
         logger.info("Starting background job scheduler...")
         
         # Create a database session factory for the scheduler
@@ -78,10 +91,10 @@ async def startup_event():
         
         # Initialize and start the scheduler
         initialize_scheduler(db_session_factory=db_session_factory)
-        logger.info("Background job scheduler started successfully")
+        logger.info("✅ Background job scheduler started successfully")
         
     except Exception as e:
-        logger.error(f"Failed to start background job scheduler: {e}")
+        logger.error(f"❌ Failed to start background job scheduler: {e}")
         # Don't fail the application startup if scheduler fails
         # The rest of the API should still work
 
@@ -95,4 +108,3 @@ async def shutdown_event():
         logger.info("Background job scheduler shut down successfully")
     except Exception as e:
         logger.error(f"Error shutting down background job scheduler: {e}")
-
