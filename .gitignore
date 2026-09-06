@@ -299,3 +299,23 @@ supabase/local/
 # KIRO AI ASSISTANT
 # ────────────────────────────────────────────────────────────────────────────
 .kiro/
+
+# ────────────────────────────────────────────────────────────────────────────
+# ADDITIONAL CLEANUP (Added during cleanup)
+# ────────────────────────────────────────────────────────────────────────────
+# Test and verification files
+backend/tests/verify_*.py
+backend/tests/test_*.pyc
+
+# Temporary summary/status files
+*_SUMMARY.md
+*_COMPLETE.md
+*_STATUS.md
+*_VERIFICATION.md
+TASK*.md
+CHECKPOINT*.md
+
+# IDE specific
+.vscode/
+.idea/
+*.code-workspace
