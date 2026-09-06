@@ -1,35 +1,89 @@
-﻿# 🔗 MKChain - Blockchain Forensics Intelligence Platform
+﻿# MKChain - Blockchain Forensics Intelligence Platform
 
-> Enterprise-grade blockchain analysis and forensics platform for tracing cryptocurrency transactions across multiple chains. Detect mixers, money laundering patterns, and sanctioned entities with ML-powered risk scoring.
+> Enterprise-grade blockchain analysis platform for cryptocurrency investigations
 
-[![Live Demo](https://img.shields.io/badge/demo-live-brightgreen)](https://mkchain.vercel.app)
-[![Backend API](https://img.shields.io/badge/API-HuggingFace-yellow)](https://mk1311-mk1311-mkchain-api.hf.space)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Live](https://img.shields.io/badge/demo-live-brightgreen)](https://mkchain.vercel.app) [![API](https://img.shields.io/badge/API-HuggingFace-yellow)](https://mk1311-mk1311-mkchain-api.hf.space) [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
----
 
-## 🌟 Overview
-
-MKChain provides professional blockchain forensics capabilities for tracking illicit cryptocurrency flows. Built for investigators, compliance teams, and security researchers who need to analyze transaction patterns across Ethereum, Bitcoin, and Polygon networks.
-
-### Key Capabilities
-
-- **Multi-Chain Analysis** - Ethereum, Bitcoin, Polygon with automated multi-hop graph traversal
-- **ML Risk Scoring** - Random Forest classifier trained on 2300+ samples with 21 behavioral features
-- **Pattern Detection** - 9 forensic detectors: mixers, peel chains, structuring, velocity analysis
-- **Dark Web Intelligence** - 100+ flagged addresses (OFAC, Lazarus Group, Hydra marketplace, WannaCry)
-- **3D Graph Visualization** - Interactive transaction networks powered by Three.js
-- **AI-Powered Reports** - Automated investigative narratives and professional PDF exports
-- **Multi-Tenant Architecture** - Organization-based access control with role-based permissions
-- **Real-Time Monitoring** - Watchlist alerts and SSE-based notifications
+[![Live](https://img.shields.io/badge/demo-live-brightgreen)](https://mkchain.vercel.app) [![API](https://img.shields.io/badge/API-HuggingFace-yellow)](https://mk1311-mk1311-mkchain-api.hf.space) [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ---
 
-## 🚀 Live Demo
+## Overview
 
-**Frontend:** [mkchain.vercel.app](https://mkchain.vercel.app)  
-**API Documentation:** [mk1311-mk1311-mkchain-api.hf.space/docs](https://mk1311-mk1311-mkchain-api.hf.space/docs)
+MKChain provides professional blockchain forensics for tracking cryptocurrency flows. Built for investigators, compliance teams, and security researchers.
 
-Try analyzing these demo addresses:
-- **Ethereum:** `0x28c6c06298d514db089934071355e5743bf21d60` (Binance hot wallet)
-- **Bitcoin:** `1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa` (Genesis address)
+### Key Features
+
+- Multi-Chain Analysis - Ethereum, Bitcoin, Polygon
+- ML Risk Scoring - Random Forest with 2,300+ samples
+- Pattern Detection - Mixers, peel chains, structuring
+- Dark Web Intelligence - OFAC, threat actors
+- 3D/2D Graph Visualization
+- AI-Powered Reports
+- Multi-Tenant Architecture
+- Real-Time Monitoring
+
+
+### Live Demo
+
+- Web: https://mkchain.vercel.app
+- API: https://mk1311-mk1311-mkchain-api.hf.space/docs
+
+Try: 0x28c6c06298d514db089934071355e5743bf21d60 (Binance)
+
+---
+
+
+## Tech Stack
+
+**Frontend:** React 19, TypeScript, TanStack Router, Tailwind CSS, Three.js, D3.js
+
+**Backend:** FastAPI, SQLAlchemy, NetworkX, scikit-learn, ReportLab
+
+**Infrastructure:** Supabase, Vercel, HuggingFace Spaces
+
+---
+
+
+## Quick Start
+
+Clone: git clone https://github.com/sumit-prajapat/mkchain.git
+
+Backend: cd backend && pip install -r requirements.txt && uvicorn main:app --reload
+
+Frontend: cd frontend && npm install && npm run dev
+
+Visit: http://localhost:5173
+
+---
+
+
+## API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | /api/analyze | Run forensic analysis |
+| GET | /api/analyses | List analyses |
+| POST | /api/compare | Compare wallets |
+| GET | /api/reports/{id}/pdf | Download PDF |
+
+Docs: http://localhost:8000/docs
+
+---
+
+
+## License
+
+MIT License - see [LICENSE](LICENSE)
+
+---
+
+## Links
+
+- Live: https://mkchain.vercel.app
+- API: https://mk1311-mk1311-mkchain-api.hf.space/docs
+- GitHub: https://github.com/sumit-prajapat/mkchain
+
+**Built with ❤️ by MKChain Team**
+
